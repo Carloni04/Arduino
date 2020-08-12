@@ -4,39 +4,51 @@
 // Control pela consola
 // botao para passar peoes
 // mostrar no display 7 seg (1 + 3) os segundos para passar os peoes
+// utilizacao de um multiplex 74LS47N
 // mostrar no display 7 seg Temperatura
 // addons seguintes: medir temp e mostrar num display 7 seg
+
+
+#include "DHT.h"
+
+
+// *******************definiçõs do DHT ********************** 
+#define DHTPIN 12     // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+
+DHT dht(DHTPIN, DHTTYPE);
+
+
+
+// multiplex addr
+#define PinMultiplexAddr0 8
+#define PinMultiplexAddr1 9
+#define PinMultiplexAddr2 10
+#define PinMultiplexAddr3 11
+// display pins
+#define PinDP  A5
+#define PinAddr3 A4
+#define PinAddr2 A3
+#define PinAddr1 A2
+#define PinAddr0 A1
+
 
 #define OFF 0
 #define ON  1
 #define TEST 2
 
  //colocar resistencia de 10k caso nao seja pullup ou pulldown
-#define PinBotton 8   
+#define PinBotton 7   
 
-// Portas dos Pins do Display 8 seg
-#define PinA  9
-#define PinB  8
-#define PinC  A4
-#define PinD  A2
-#define PinE  A3
-#define PinF  10
-#define PinG  11
-#define PinDP  A5
-#define PinBotao 7
-#define PinAddr0 12
-#define PinAddr1 13
-#define PinAddr2 A1
-#define PinAddr3 A0
 #define minus 10
 #define dot 11
 #define Doff 12
+
 
 // Numero de Caracteres configurados no display 7 seg
 #define numberDisplayCaracteres  13
 #define numDisplays  4
 #define freqDisplayMultiplex 2
-
 
 
 
@@ -53,6 +65,8 @@ int timerPisca;
 
 int estadoBotao;
 int estadoBotaoAnterior;
+
+float DHTvalues[2];
 
 
 int estadoSistema;
@@ -72,6 +86,8 @@ void showDisplay(int number);
 void identifyDigits(int number);
 
 
+
+/*
 // Configuracao display 7 seg
 byte DisplayNumbers[numberDisplayCaracteres] = {  0b11111100,  //0
                                                  0b01100000,   //1
@@ -89,11 +105,15 @@ byte DisplayNumbers[numberDisplayCaracteres] = {  0b11111100,  //0
   
   
 // Pins do display 7 seg
-byte PinDisplay7Seg[8] = {PinA, PinB, PinC, PinD, PinE, PinF, PinG, PinDP};
+//byte PinDisplay7Seg[8] = {PinA, PinB, PinC, PinD, PinE, PinF, PinG, PinDP};
 
-
+*/
 byte DisplayAddr[numDisplays] = {PinAddr0, PinAddr1, PinAddr2, PinAddr3};
+byte MultiplexAddr[4] = {PinMultiplexAddr0, PinMultiplexAddr1, PinMultiplexAddr2, PinMultiplexAddr3};
+
 byte digitos[numDisplays];
+
+
 
 
 
@@ -103,6 +123,11 @@ byte digitos[numDisplays];
 
 void setup() {
   // put your setup code here, to run once:
+
+
+
+
+// put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println("Sistema Integrado de gestão de sinais de transito V"+ String(versaoApp,2));
   Serial.println("System Started......");
@@ -111,6 +136,11 @@ void setup() {
 
 
   pinMode (PinBotton, INPUT_PULLUP);
+  
+  dht.begin();
+
+  
+  // **** ALTERAR FUNCAO
   initDisplay7Seg();
   
   estadoBotao = !digitalRead(PinBotton); // LOW e UP porque é input_pullup
@@ -128,20 +158,15 @@ void setup() {
 
 
 
-
-
-
-
-
-
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  
+
+
   char caracter;
-  
-  showDisplay(5159);
+  // **** ALTERAR FUNCAO *******
+  showDisplay(9764);
   
   estadoBotao = !digitalRead(PinBotton); // LOW e UP porque é input_pullup
   if((estadoBotao != estadoBotaoAnterior) && (estadoBotao==HIGH)) {  
@@ -237,15 +262,32 @@ switch (estadoSistema) {
 
 
  delay(1);
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
-
-
-
-
-
-
-
-      
 
 
 
@@ -254,6 +296,12 @@ switch (estadoSistema) {
 
 byte menu(String command) {
 
+DHTvalues[0]= dht.readTemperature();
+DHTvalues[1]= dht.readHumidity();
+if (isnan(DHTvalues[0] ) || isnan(DHTvalues[1])) {
+  Serial.println(F("Failed to read from DHT sensor!"));
+  return;
+}
 
 if (Command == "ON") {
       Serial.println("System ON");
@@ -265,10 +313,15 @@ if (Command == "ON") {
       Serial.println("System in Test Mode");
     }
     if (Command == "TEMP") {
-      Serial.println("Temperature is: ");
+      // Read temperature as Celsius (the default)
+      Serial.print("Temperature is: ");
+      Serial.print(DHTvalues[0]);
+      Serial.println("ºC");
     }
     if (Command == "HUM") {
-      Serial.println("Humidity is: ");
+      Serial.print("Humidity is: ");            
+      Serial.println(DHTvalues[1]);
+      
     }
      
     if (Command == "HELP") {
@@ -287,10 +340,12 @@ return 0;
 // ##### Funcoes do Display 7seg
 
 void showNumber(int id) {
-  // display a number in 7seg led
- for (int nL=0;nL<8;nL++) {
-      digitalWrite(PinDisplay7Seg[nL], !bitRead(DisplayNumbers[id], 7-nL));              
-  }    
+  
+  for (int n=0;n<4;n++) {
+    digitalWrite(MultiplexAddr[n], bitRead(id, n));
+  }
+
+   
 }
 
 void initLed (int port) {
@@ -298,21 +353,33 @@ void initLed (int port) {
   pinMode(port, OUTPUT);
 }
 
-void initDisplay7Seg () {
-  // Iniciate the display 7 seg pins
- for (int i=0;i<8;i++) {    
-      initLed(PinDisplay7Seg[i]);     
- }
+void initDisplay7Seg () {  
+  // ******** Iniciate the display 7 seg pins *********
+
+  
+  for (int i=0;i<4;i++) {    
+        initLed(MultiplexAddr[i]);     
+   }
+  initLed(PinDP);
+  digitalWrite(PinDP, true);
  for (int i=0;i<numDisplays;i++) {      
     initLed(DisplayAddr[i]);
     digitalWrite(DisplayAddr[i], false); 
  }
 
+
+
+
+
+
+
 }
 
 
 void showDigit(int digitId, boolean value){
+  
   digitalWrite(DisplayAddr[digitId], value);
+  
 }
 
 void identifyDigits(int number){
